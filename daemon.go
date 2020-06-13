@@ -1,7 +1,7 @@
 /*
-CompileDaemon is a very simple compile daemon for Go.
+PollCompileDaemon is a very simple compile daemon for Go.
 
-CompileDaemon watches your .go files in a directory and invokes `go build`
+PollCompileDaemon watches your .go files in a directory and invokes `go build`
 if a file changes.
 
 Examples
@@ -9,30 +9,30 @@ Examples
 In its simplest form, the defaults will do. With the current working directory set
 to the source directory you can simply…
 
-    $ CompileDaemon
+    $ PollCompileDaemon
 
 … and it will recompile your code whenever you save a source file.
 
 If you want it to also run your program each time it builds you might add…
 
-    $ CompileDaemon -command="./MyProgram -my-options"
+    $ PollCompileDaemon -command="./MyProgram -my-options"
 
 … and it will also keep a copy of your program running. Killing the old one and
 starting a new one each time you build. For advanced usage you can also supply
 the changed file to the command by doing…
 
-	$ CompileDaemon -command="./MyProgram -my-options %[1]s"
+	$ PollCompileDaemon -command="./MyProgram -my-options %[1]s"
 
 …but note that this will not be set on the first start.
 
 You may find that you need to exclude some directories and files from
 monitoring, such as a .git repository or emacs temporary files…
 
-    $ CompileDaemon -exclude-dir=.git -exclude=".#*"
+    $ PollCompileDaemon -exclude-dir=.git -exclude=".#*"
 
 If you want to monitor files other than .go and .c files you might…
 
-    $ CompileDaemon -include=Makefile -include="*.less" -include="*.tmpl"
+    $ PollCompileDaemon -include=Makefile -include="*.less" -include="*.tmpl"
 
 Options
 
@@ -77,7 +77,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/fsnotify/fsnotify"
+	"github.com/radovskyb/watcher"
 )
 
 // Milliseconds to wait for the next job to begin after a file change
@@ -114,7 +114,7 @@ var (
 	flagBuild           = flag.String("build", "go build", "Command to rebuild after changes")
 	flagBuildDir        = flag.String("build-dir", "", "Directory to run build command in.  Defaults to directory")
 	flagRunDir          = flag.String("run-dir", "", "Directory to run command in.  Defaults to directory")
-	flagColor           = flag.Bool("color", false, "Colorize output for CompileDaemon status messages")
+	flagColor           = flag.Bool("color", false, "Colorize output for PollCompileDaemon status messages")
 	flagLogPrefix       = flag.Bool("log-prefix", true, "Print log timestamps and subprocess stderr/stdout output")
 	flagGracefulKill    = flag.Bool("graceful-kill", false, "Gracefully attempt to kill the child process by sending a SIGTERM first")
 	flagGracefulTimeout = flag.Uint("graceful-timeout", 3, "Duration (in seconds) to wait for graceful kill to complete")
@@ -130,17 +130,17 @@ var (
 func okColor(format string, args ...interface{}) string {
 	if *flagColor {
 		return color.GreenString(format, args...)
-	} else {
-		return fmt.Sprintf(format, args...)
 	}
+
+	return fmt.Sprintf(format, args...)
 }
 
 func failColor(format string, args ...interface{}) string {
 	if *flagColor {
 		return color.RedString(format, args...)
-	} else {
-		return fmt.Sprintf(format, args...)
 	}
+
+	return fmt.Sprintf(format, args...)
 }
 
 // Run `go build` and print the output if something's gone wrong.
@@ -264,7 +264,7 @@ func runner(commandTemplate string, buildStarted <-chan string, buildSuccess <-c
 
 	// Launch concurrent process watching for signals from outside that
 	// indicate termination to kill the running process alongside
-	// CompileDaemon to prevent orphan processes.
+	// PollCompileDaemon to prevent orphan processes.
 	go func() {
 		processSignalChannel := make(chan os.Signal, 1)
 		signal.Notify(processSignalChannel, fatalSignals...)
@@ -386,26 +386,26 @@ func main() {
 		log.Fatal("Graceful termination is not supported on your platform.")
 	}
 
-	watcher, err := fsnotify.NewWatcher()
+	w := watcher.New()
+	w.SetMaxEvents(1)
+	defer w.Close()
 
-	if err != nil {
-		log.Fatal(err)
+	if err := w.Start(time.Millisecond * 100); err != nil {
+		log.Fatalln(err)
 	}
-
-	defer watcher.Close()
 
 	for _, flagDirectory := range flagDirectories {
 		if *flagRecursive == true {
-			err = filepath.Walk(flagDirectory, func(path string, info os.FileInfo, err error) error {
+			err := filepath.Walk(flagDirectory, func(path string, info os.FileInfo, err error) error {
 				if err == nil && info.IsDir() {
 					if flagExcludedDirs.Matches(path) {
 						return filepath.SkipDir
-					} else {
-						if *flagVerbose {
-							log.Printf("Watching directory '%s' for changes.\n", path)
-						}
-						return watcher.Add(path)
 					}
+
+					if *flagVerbose {
+						log.Printf("Watching directory!!!!!! '%s' for changes.\n", path)
+					}
+					return w.Add(path)
 				}
 				return err
 			})
@@ -414,11 +414,11 @@ func main() {
 				log.Fatal("filepath.Walk():", err)
 			}
 
-			if err := watcher.Add(flagDirectory); err != nil {
+			if err := w.Add(flagDirectory); err != nil {
 				log.Fatal("watcher.Add():", err)
 			}
 		} else {
-			if err := watcher.Add(flagDirectory); err != nil {
+			if err := w.Add(flagDirectory); err != nil {
 				log.Fatal("watcher.Add():", err)
 			}
 		}
@@ -437,32 +437,37 @@ func main() {
 		go flusher(buildStarted, buildSuccess)
 	}
 
-	for {
-		select {
-		case ev := <-watcher.Events:
-			if ev.Op&fsnotify.Remove == fsnotify.Remove || ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Create == fsnotify.Create {
-				base := filepath.Base(ev.Name)
+	go func() {
+		for {
+			select {
+			case ev := <-w.Event:
+				if ev.Op == watcher.Remove || ev.Op == watcher.Write || ev.Op == watcher.Create {
+					base := filepath.Base(ev.Path)
 
-				// Assume it is a directory and track it.
-				if *flagRecursive == true && !flagExcludedDirs.Matches(ev.Name) {
-					watcher.Add(ev.Name)
-				}
+					// Assume it is a directory and track it.
+					if *flagRecursive == true && !flagExcludedDirs.Matches(ev.Path) {
+						w.Add(ev.Path)
+					}
 
-				if flagIncludedFiles.Matches(base) || matchesPattern(pattern, ev.Name) {
-					if !flagExcludedFiles.Matches(base) {
-						jobs <- ev.Name
+					if flagIncludedFiles.Matches(base) || matchesPattern(pattern, ev.Path) {
+						if !flagExcludedFiles.Matches(base) {
+							jobs <- ev.Path
+						}
 					}
 				}
-			}
 
-		case err := <-watcher.Errors:
-			if v, ok := err.(*os.SyscallError); ok {
-				if v.Err == syscall.EINTR {
-					continue
+			case err := <-w.Error:
+				if v, ok := err.(*os.SyscallError); ok {
+					if v.Err == syscall.EINTR {
+						continue
+					}
+					log.Fatal("watcher.Error: SyscallError:", v)
 				}
-				log.Fatal("watcher.Error: SyscallError:", v)
+				log.Fatal("watcher.Error:", err)
+
+			case <-w.Closed:
+				return
 			}
-			log.Fatal("watcher.Error:", err)
 		}
-	}
+	}()
 }

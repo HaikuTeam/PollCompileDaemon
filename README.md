@@ -1,17 +1,20 @@
-# Very simple Compile Daemon for Go [![GoDoc](https://godoc.org/github.com/githubnemo/CompileDaemon?status.png)](http://godoc.org/github.com/githubnemo/CompileDaemon)
+# Compile Daemon for Go with Polling
 
-Watches your .go files in a directory and invokes `go build` if
-a file changed. Nothing more.
+Watches your .go files in a directory and invokes `go build` if a file changed.
+Nothing more.
+
+This project a fork from [CompileDaemon](https://github.com/githubnemo/CompileDaemon) that changes the underlying file
+watcher to use polling instead of file system events.
 
 Usage:
 
-	$ ./CompileDaemon -directory=yourproject/
+    $ ./PollCompileDaemon -directory=yourproject/
 
 ## Installation
 
-You can use the `go` tool to install `CompileDaemon`:
+You can use the `go` tool to install `PollCompileDaemon`:
 
-	go get github.com/githubnemo/CompileDaemon
+    go get github.com/HaikuTeam/PollCompileDaemon
 
 ## Command Line Options
 
@@ -34,16 +37,16 @@ You can use the `go` tool to install `CompileDaemon`:
 
 ## Examples
 
-In its simplest form, the defaults will do. With the current working directory set
-to the source directory you can simply…
+In its simplest form, the defaults will do. With the current working directory
+set to the source directory you can simply…
 
-    $ CompileDaemon
+    $ PollCompileDaemon
 
 … and it will recompile your code whenever you save a source file.
 
 If you want it to also run your program each time it builds you might add…
 
-    $ CompileDaemon -command="./MyProgram -my-options"
+    $ PollCompileDaemon -command="./MyProgram -my-options"
 
 … and it will also keep a copy of your program running. Killing the old one and
 starting a new one each time you build.
@@ -51,19 +54,24 @@ starting a new one each time you build.
 You may find that you need to exclude some directories and files from
 monitoring, such as a .git repository or emacs temporary files…
 
-    $ CompileDaemon -exclude-dir=.git -exclude=".#*" …
+    $ PollCompileDaemon -exclude-dir=.git -exclude=".#*" …
 
 If you want to monitor files other than .go and .c files you might…
 
-    $ CompileDaemon -include=Makefile -include="*.less" -include="*.tmpl"
+    $ PollCompileDaemon -include=Makefile -include="*.less" -include="*.tmpl"
 
 ## Notes
 
 ### Too many open files
 
-If you get an error for too many open files, you might wish to exclude your .git, .hg, or similar VCS directories using `-exclude-dir=…`. This is common on OS X and BSD platforms where each watched file consumes a file descriptor.
+If you get an error for too many open files, you might wish to exclude your
+.git, .hg, or similar VCS directories using `-exclude-dir=…`. This is common on
+OS X and BSD platforms where each watched file consumes a file descriptor.
 
-If you still have too many open files, then you need to raise your process's file limit using the `ulimit` command. Something like `ulimit -n 1024` will probably take care of it. There is also a sysctl based limit which you may reach and need to adjust.
+If you still have too many open files, then you need to raise your process's
+file limit using the `ulimit` command. Something like `ulimit -n 1024` will
+probably take care of it. There is also a sysctl based limit which you may reach
+and need to adjust.
 
 
 ## Project Details
@@ -72,12 +80,11 @@ If you still have too many open files, then you need to raise your process's fil
 
 CompileDaemon was written by [githubnemo](https://github.com/githubnemo).
 
-Code and documentation was contributed by [jimstudt](https://github.com/jimstudt).
+Code and documentation was contributed by
+[jimstudt](https://github.com/jimstudt).
 
-### Repository
-
-CompileDaemon is kept at [https://github.com/githubnemo/CompileDaemon](https://github.com/githubnemo/CompileDaemon)
 
 ### License
 
-CompileDaemon is licensed under the [BSD Two Clause License](https://github.com/githubnemo/CompileDaemon/blob/master/LICENSE)
+PollCompileDaemon is licensed under the [BSD Two Clause
+License](https://github.com/githubnemo/PollCompileDaemon/blob/master/LICENSE)
