@@ -390,10 +390,6 @@ func main() {
 	w.SetMaxEvents(1)
 	defer w.Close()
 
-	if err := w.Start(time.Millisecond * 100); err != nil {
-		log.Fatalln(err)
-	}
-
 	for _, flagDirectory := range flagDirectories {
 		if *flagRecursive == true {
 			err := filepath.Walk(flagDirectory, func(path string, info os.FileInfo, err error) error {
@@ -470,4 +466,8 @@ func main() {
 			}
 		}
 	}()
+
+	if err := w.Start(time.Millisecond * 100); err != nil {
+		log.Fatalln(err)
+	}
 }
